@@ -1,0 +1,41 @@
+services:
+  spark-master:
+    build:
+      context: .
+    container_name: spark-master
+    hostname: spark-master
+    networks:
+      - spark-network
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+      - "2222:22"  # Expose SSH port
+    volumes:
+      - spark-inputs:/data/inputs
+      - ./data/outputs:/data/outputs
+      - ./jobs:/jobs
+    environment:
+      - SPARK_MODE=master
+
+  spark-worker:
+    build:
+      context: .
+    hostname: spark-worker
+    networks:
+      - spark-network
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_MODE=worker
+      - SPARK_WORKER_CORES=3
+      - SPARK_WORKER_MEMORY=3g
+    volumes:
+      - spark-inputs:/data/inputs
+      - ./data/outputs:/data/outputs
+      - ./jobs:/jobs
+
+networks:
+  spark-network:
+    driver: bridge
+
+volumes:
+  spark-inputs:

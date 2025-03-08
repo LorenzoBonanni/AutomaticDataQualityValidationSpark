@@ -1,0 +1,4 @@
+pandas~=2.2.3
+pyspark~=3.5.5
+tqdm~=4.66.3
+scikit-learn~=1.6.1

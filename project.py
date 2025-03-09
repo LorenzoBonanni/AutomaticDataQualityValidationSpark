@@ -277,7 +277,7 @@ def run_experiment(df_splits, train_batches=TRAIN_BATCHES, magnitude=MAGNITUDE, 
 
     results_df = pd.DataFrame({'ground_truth': gt, 'predictions': pred, 'train_time': train_time, 'test_time': test_time})
     error_string = ','.join([ANOMALY_TYPES[a] for a in anomaly])
-    results_df.to_csv(f'data/outputs/results_magnitude={magnitude}_ERROR={error_string}.csv', index=False)
+    results_df.to_csv(f'data/outputs/results_NSAMPLE:{n_samples}.csv', index=False)
 
 def main():
     # Load household data

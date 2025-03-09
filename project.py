@@ -219,10 +219,10 @@ def perturb_batch(df, anomaly, magnitude):
     return perturbed_rdd, target
 
 # Train Isolation Forest model
-def train_isolation_forest(final_data, n_samples=0.1):
+def train_isolation_forest(final_data):
     isolation_forest = IsolationForest() \
         .setBootstrap(False) \
-        .setMaxSamples(int(n_samples*final_data.count())) \
+        .setMaxSamples(int(0.2*final_data.count())) \
         .setFeaturesCol("scaled_features") \
         .setPredictionCol("prediction") \
         .setScoreCol("outlierScore") \
@@ -234,19 +234,21 @@ def train_isolation_forest(final_data, n_samples=0.1):
 def split_household_data(df):
     dates = df.select(col("Date")).distinct().collect()
     df_splits = [df.filter(col("Date") == row["Date"]) for row in dates]
-    return df_splits[:100]
+    return df_splits[:200]
 
-def run_experiment(df_splits, train_batches=TRAIN_BATCHES, magnitude=MAGNITUDE, anomaly=None, n_samples=0.1):
+def run_experiment(df_splits, train_batches=TRAIN_BATCHES, magnitude=MAGNITUDE, anomaly=None):
     random.seed(1)
     gt = []
     pred = []
     train_time = []
     test_time = []
-    for i in trange(len(df_splits)-train_batches):
+    statistics = [compute_statistics(batch) for batch in df_splits[:train_batches]]
+    for i in trange(len(df_splits)-train_batches-1):
         initial_time = time.time()
-        training_data = spark.createDataFrame([compute_statistics(batch) for batch in df_splits[:train_batches+i]])
+        statistics.append(compute_statistics(df_splits[train_batches+i]))
+        training_data = spark.createDataFrame(statistics)
         statistics_time = time.time() - initial_time
-        test_batch = df_splits[train_batches+i]
+        test_batch = df_splits[train_batches+i+1]
         chosen_anomaly = random.choice(anomaly)
         perturbed_rdd, target = perturb_batch(test_batch, chosen_anomaly, magnitude)
         gt.append(target)
@@ -262,7 +264,7 @@ def run_experiment(df_splits, train_batches=TRAIN_BATCHES, magnitude=MAGNITUDE, 
         final_data = scaled_data.select("scaled_features")
 
         # Train model
-        isolation_forest_model = train_isolation_forest(final_data, n_samples=n_samples)
+        isolation_forest_model = train_isolation_forest(final_data)
         train_time.append(time.time() - initial_time + statistics_time)
 
         # Detect anomalies in new data
@@ -285,8 +287,7 @@ def main():
     # Split df into batches
     df_splits = split_household_data(df)
     spark.sparkContext.setLogLevel("ERROR")
-    for n_sample in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
-        run_experiment(df_splits, anomaly=[0, 1, 2, 3], n_samples=n_sample)
+    run_experiment(df_splits, anomaly=[0, 1, 2, 3], n_samples=n_sample)
     spark.stop()
 
 if __name__ == '__main__':

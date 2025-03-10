@@ -144,10 +144,11 @@ def main():
     parser = argparse.ArgumentParser(description="Run data quality validation experiment")
     parser.add_argument('--dataset', type=str, required=True, choices=['household', 'metropt3', 'onlineretail'], help='Dataset to use for the experiment')
     parser.add_argument('--batch_size', type=int, required=False, help='Batch size for the experiment', default=100)
+    parser.add_argument('--anomaly', type=int, nargs='+', required=True, help='List of anomalies for the experiment')
     arguments = parser.parse_args()
     df_splits = get_df_splits(spark, arguments)
     spark.sparkContext.setLogLevel("ERROR")
-    run_experiment(df_splits, anomaly=list(range(6)), args=arguments)
+    run_experiment(df_splits, anomaly=arguments.anomaly, args=arguments)
     spark.stop()
 
 

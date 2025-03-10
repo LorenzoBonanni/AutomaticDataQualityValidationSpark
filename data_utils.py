@@ -8,47 +8,29 @@ from pyspark.sql.types import StructType, StructField, DoubleType, StringType, I
 from pyspark.sql import Row
 
 def peculiarity_index( df, column):
-    trigrams_count = (
-        df.select(column).filter(col(column).isNotNull())
-        .rdd.map(lambda row: list(row[0]))  # Convert each string to a character list (remove spaces)
-        .map(lambda chars: ([chars[i] + chars[i + 1] + chars[i + 2] for i in range(len(chars) - 2)] if len(
-            chars) > 2 else []))  # Generate trigrams per string
-        .map(lambda trigrams: [(trigram, 1) for trigram in trigrams])  # Convert each trigram into (trigram, 1)
-        .map(lambda trigram_list: dict(
-            (trigram, sum(num for _, num in group)) for trigram, group in
-            groupby(sorted(trigram_list, key=lambda x: x[0]), key=lambda x: x[0])
-        ))  # Sort bigram list and count occurrences
-    )
+    def compute_pc_idx(row):
+        string = row[0]
+        char_string = list(string)
+        trigrams = [char_string[i] + char_string[i + 1] + char_string[i + 2] for i in range(len(char_string) - 2)]
+        tri_count = {}
+        bi_count = {}
+        for trigram in trigrams:
+            bigram1 = trigram[:2]
+            bigram2 = trigram[1:]
+            tri_count[trigram] = tri_count.get(trigram, 0) + 1
+            bi_count[bigram1] = bi_count.get(bigram1, 0) + 1
+            bi_count[bigram2] = bi_count.get(bigram2, 0) + 1
 
-    bigram_count = (
-        df.select(column).filter(col(column).isNotNull())
-        .rdd.map(lambda row: list(row[0]))  # Convert each string to a character list
-        .map(lambda chars: (
-            [chars[i] + chars[i + 1] for i in range(len(chars) - 1)] if len(chars) > 1 else []
-        ))  # Generate bigrams per string
-        .map(lambda bigrams: [(bigram, 1) for bigram in bigrams])  # Convert each bigram into (bigram, 1)
-        .map(lambda bigram_list: dict(
-            (bigram, sum(num for _, num in group)) for bigram, group in
-            groupby(sorted(bigram_list, key=lambda x: x[0]), key=lambda x: x[0])
-        ))  # Sort bigram list and count occurrences
-    ).collect()
+        t = [
+            (0.5 * (log(bi_count.get(trigram[:2], 1e-6)) + log(bi_count.get(trigram[1:], 1e-6))) - log(num)) ** 2
+            for trigram, num in tri_count.items()
+        ]
 
-    idx_trigrams_count = trigrams_count.zipWithIndex()
+        return sqrt(sum(t) / (len(t) + 1e-6))
 
+    pc_idx = df.select(column).filter(col(column).isNotNull()).rdd.map(compute_pc_idx).max()
 
-    pecuniarity_index = (idx_trigrams_count
-        .map(
-            lambda x: [
-                (trigram,
-                 0.5 * (log(bigram_count[x[1]].get(trigram[:2], 1e-6)) + log(bigram_count[x[1]].get(trigram[1:], 1e-6))) - log(num))
-                for trigram, num in x[0].items()
-            ]
-        )
-        .map(lambda lst: [(trigram, val ** 2) for trigram, val in lst])
-        .map( lambda lst: sqrt(sum(val for _, val in lst) / (len(lst)+1e-6)))
-    ).max()
-    return pecuniarity_index
-
+    return float(pc_idx)
 
 def split_data(df, args):
     """
@@ -70,10 +52,10 @@ def split_data(df, args):
 def load_online_retail_data(spark):
     path = 'data/inputs/Online Retail.csv'
     schema = StructType([
-        StructField('InvoiceNo', IntegerType(), True),
+        StructField('InvoiceNo', StringType(), True),
         StructField('StockCode', StringType(), True),
         StructField('Description', StringType(), True),
-        StructField('Quantity', IntegerType(), True),
+        StructField('Quantity', DoubleType(), True),
         StructField('InvoiceDate', StringType(), True),
         StructField('UnitPrice', DoubleType(), True),
         StructField('CustomerID', StringType(), True),
@@ -84,6 +66,8 @@ def load_online_retail_data(spark):
         "timestamp",
         to_timestamp(col("InvoiceDate"), "dd/MM/yyyy HH:mm")
     )
+    df = df.withColumn("Quantity", col("Quantity").cast("double"))
+    df = df.withColumn("InvoiceNo", col("InvoiceNo").cast("double"))
     df = df.drop("InvoiceDate", "CustomerID")
     return df
 
@@ -211,11 +195,11 @@ def compute_statistics(df):
         agg_exprs.append((approx_count_distinct(col(column))/total_rows).alias(f"{column}_approx_distinct_count"))
         statistics_schema.append(StructField(f"{column}_approx_distinct_count", DoubleType(), True))
         if isinstance(df.schema[column].dataType, (DoubleType, IntegerType)):
-            agg_exprs.append(max(col(column)).cast('float').alias(f"{column}_max"))
+            agg_exprs.append(max(col(column)).cast(DoubleType()).alias(f"{column}_max"))
             statistics_schema.append(StructField(f"{column}_max", DoubleType(), True))
-            agg_exprs.append(mean(col(column)).cast('float').alias(f"{column}_mean"))
+            agg_exprs.append(mean(col(column)).cast(DoubleType()).alias(f"{column}_mean"))
             statistics_schema.append(StructField(f"{column}_mean", DoubleType(), True))
-            agg_exprs.append(min(col(column)).cast('float').alias(f"{column}_min"))
+            agg_exprs.append(min(col(column)).cast(DoubleType()).alias(f"{column}_min"))
             statistics_schema.append(StructField(f"{column}_min", DoubleType(), True))
             agg_exprs.append(stddev(col(column)).alias(f"{column}_stddev"))
             statistics_schema.append(StructField(f"{column}_stddev", DoubleType(), True))

@@ -114,6 +114,86 @@ def generate_swapped_numeric_fields_anomaly(df, rows_indexes):
     return modified_rdd
 
 
+def generate_swapped_textual_fields_anomaly(df, rows_indexes):
+    # Convert the DataFrame to an RDD and zip with index
+    rdd_with_index = df.rdd.zipWithIndex()
+    cols = df.columns
+    col_types = {col_name: col_type for col_name, col_type in df.dtypes}
+
+    # Function to modify rows at specified indexes
+    def modify_row(row):
+        row_data, row_index = row
+        if row_index in rows_indexes:
+            col1, col2 = random.sample([c for c in cols if col_types[c] == "string"], 2)
+            new_row = [row_data[cols.index(col2)] if col_name == col1 else row_data[cols.index(col1)] if col_name == col2 else value for col_name, value in zip(cols, row_data)]
+            return new_row
+        else:
+            return row_data
+
+    # Apply the modification to the RDD
+    modified_rdd = rdd_with_index.map(modify_row)
+
+    return modified_rdd
+
+
+def generate_typo_anomaly(df, rows_indexes):
+    # Convert the DataFrame to an RDD and zip with index
+    rdd_with_index = df.rdd.zipWithIndex()
+    cols = df.columns
+    col_types = {col_name: col_type for col_name, col_type in df.dtypes}
+
+    def perturb_text(word):
+        proximity_map = {
+            "q": ["w", "a"],
+            "w": ["q", "e", "s"],
+            "e": ["w", "r", "d"],
+            "r": ["e", "t", "f"],
+            "t": ["r", "y", "g"],
+            "y": ["t", "u", "h"],
+            "u": ["y", "i", "j"],
+            "i": ["u", "o", "k"],
+            "o": ["i", "p", "l"],
+            "p": ["o", "l"],
+            "a": ["q", "s", "z"],
+            "s": ["a", "d", "x", "w"],
+            "d": ["s", "f", "c", "e"],
+            "f": ["d", "g", "v", "r"],
+            "g": ["f", "h", "b", "t"],
+            "h": ["g", "j", "n", "y"],
+            "j": ["h", "k", "m", "u"],
+            "k": ["j", "l", "i"],
+            "l": ["k", "o", "p"],
+            "z": ["a", "x"],
+            "x": ["z", "c", "s"],
+            "c": ["x", "v", "d"],
+            "v": ["c", "b", "f"],
+            "b": ["v", "n", "g"],
+            "n": ["b", "m", "h"],
+            "m": ["n", "j"]
+        }
+        char_index = random.randint(0, len(word) - 1)
+        char = word[char_index]
+        if char in proximity_map:
+            new_char = random.choice(proximity_map[char])
+            word = word[:char_index] + new_char + word[char_index + 1:]
+        return word
+
+    # Function to modify rows at specified indexes
+    def modify_row(row):
+        row_data, row_index = row
+        if row_index in rows_indexes:
+            col1 = random.sample([c for c in cols if col_types[c] == "string"], 1)[0]
+            new_row = [perturb_text(row_data[cols.index(col1)]) if col_name == col1 else value for col_name, value in zip(cols, row_data)]
+            return new_row
+        else:
+            return row_data
+
+    # Apply the modification to the RDD
+    modified_rdd = rdd_with_index.map(modify_row)
+
+    return modified_rdd
+
+
 def perturb_batch(df, anomaly, magnitude):
     """
     Introduces synthetic anomalies into a batch of data. The types of anomalies include:
@@ -137,7 +217,9 @@ def perturb_batch(df, anomaly, magnitude):
         elif ANOMALY_TYPES[anomaly] == "swaped_numeric_fields":
             perturbed_rdd = generate_swapped_numeric_fields_anomaly(df, rows_indexes)
         elif ANOMALY_TYPES[anomaly] == "swapped_textual_fields":
-            pass
+            perturbed_rdd = generate_swapped_textual_fields_anomaly(df, rows_indexes)
+        elif ANOMALY_TYPES[anomaly] == "typos":
+            perturbed_rdd = generate_typo_anomaly(df, rows_indexes)
         else:
             raise ValueError("Invalid anomaly type")
     else:

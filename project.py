@@ -39,8 +39,9 @@ def train_isolation_forest(final_data):
 
 def prepare_training_data(statistics, df_splits, train_batches, i):
     """Update statistics and prepare training data."""
-    statistics.append(compute_statistics(df_splits[train_batches + i].drop("timestamp")))
-    return spark.createDataFrame(statistics)
+    data, schema = compute_statistics(df_splits[train_batches + i].drop("timestamp"))
+    statistics.append(data)
+    return spark.createDataFrame(statistics, schema=schema)
 
 
 def prepare_test_batch(test_batch, anomaly, magnitude):
@@ -88,7 +89,7 @@ def run_experiment(df_splits, train_batches=TRAIN_BATCHES, magnitude=MAGNITUDE, 
     }
 
     # Compute initial statistics for training batches
-    statistics = [compute_statistics(batch.drop("timestamp")) for batch in df_splits[:train_batches]]
+    statistics = [compute_statistics(batch.drop("timestamp"))[0] for batch in df_splits[:train_batches]]
 
     for i in trange(len(df_splits) - train_batches - 1):
         initial_time = time.time()
@@ -106,8 +107,6 @@ def run_experiment(df_splits, train_batches=TRAIN_BATCHES, magnitude=MAGNITUDE, 
         results['ground_truth'].append(target)
         test_data = spark.createDataFrame(perturbed_rdd, test_batch.schema)
 
-
-
         # Prepare and scale features using the pre-fitted scaler
         scaled_training_data, scaler_model = prepare_and_scale_features(training_data, None)
 
@@ -119,7 +118,8 @@ def run_experiment(df_splits, train_batches=TRAIN_BATCHES, magnitude=MAGNITUDE, 
 
         # Detect anomalies in new data
         initial_time = time.time()
-        test_data_stats = spark.createDataFrame([compute_statistics(test_data)])
+        data, schema = compute_statistics(test_data)
+        test_data_stats = spark.createDataFrame([data], schema=schema)
         scaled_test_data, _ = prepare_and_scale_features(test_data_stats, scaler_model)
         prediction = train_and_predict(isolation_forest_model, scaled_test_data)
         results['predictions'].append(prediction)
@@ -142,12 +142,12 @@ def main():
     spark.conf.set("spark.sql.legacy.timeParserPolicy", "LEGACY")
     seed_everything(1)
     parser = argparse.ArgumentParser(description="Run data quality validation experiment")
-    parser.add_argument('--dataset', type=str, required=True, choices=['household', 'metropt3'], help='Dataset to use for the experiment')
+    parser.add_argument('--dataset', type=str, required=True, choices=['household', 'metropt3', 'onlineretail'], help='Dataset to use for the experiment')
     parser.add_argument('--batch_size', type=int, required=False, help='Batch size for the experiment', default=100)
     arguments = parser.parse_args()
     df_splits = get_df_splits(spark, arguments)
     spark.sparkContext.setLogLevel("ERROR")
-    run_experiment(df_splits, anomaly=[0, 1, 2, 3], args=arguments)
+    run_experiment(df_splits, anomaly=list(range(6)), args=arguments)
     spark.stop()
 
 

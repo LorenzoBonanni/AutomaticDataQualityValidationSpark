@@ -3,3 +3,4 @@ pyspark~=3.5.5
 tqdm~=4.66.3
 scikit-learn~=1.6.1
 PyArrow~=19.0.1
+seaborn~=0.13.2

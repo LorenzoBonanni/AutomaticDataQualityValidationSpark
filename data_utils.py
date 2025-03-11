@@ -56,7 +56,7 @@ def load_online_retail_data(spark):
         StructField('StockCode', StringType(), True),
         StructField('Description', StringType(), True),
         StructField('Quantity', DoubleType(), True),
-        StructField('InvoiceDate', StringType(), True),
+        StructField('InvoiceDate', TimestampType(), True),
         StructField('UnitPrice', DoubleType(), True),
         StructField('CustomerID', StringType(), True),
         StructField('Country', StringType(), True)
@@ -64,7 +64,7 @@ def load_online_retail_data(spark):
     df = spark.read.csv(path, sep=',', header=True, schema=schema)
     df = df.withColumn(
         "timestamp",
-        to_timestamp(col("InvoiceDate"), "dd/MM/yyyy HH:mm")
+        col("InvoiceDate")
     )
     df = df.withColumn("Quantity", col("Quantity").cast("double"))
     df = df.withColumn("InvoiceNo", col("InvoiceNo").cast("double"))
@@ -94,7 +94,7 @@ def load_household_data(spark):
         StructField('Sub_metering_2', DoubleType(), True),
         StructField('Sub_metering_3', DoubleType(), True)
     ])
-    df = spark.read.csv(path, schema=schema, sep=';', header=True)
+    df = spark.read.csv(path, schema=schema, sep=',', header=True)
     df = df.withColumn(
         "timestamp",
         to_timestamp(concat_ws(" ", col("Date"), col("Time")), "dd/MM/yyyy HH:mm:ss")
